@@ -73,6 +73,7 @@ O gráfico de dispersão acima representa as observações dada a escolaridade e
 O gráfico acima representa a média da renda logaritmizada em função da escolaridade. Complicado, não é? Mas podemos observar aqui que a função logaritmo da renda opera apenas como uma compressão das distâncias entre os casos. Vemos acima que a relação entre o log(renda) e escolaridade é exatamente igual à da renda, conforme o gráfico anterior. A diferença está no eixo vertical (y), em que podemos ver a maior proximidade entre as rendas, o que não interfere na análise de correlação. Com este gráfico, podemos ver com maior detalhe a correlação entre renda e escolarização.
 
 correlation  std.err     t.value  p.value
+
 0.31         0.002017632 151.851  >0.001
 
 ### Idade e renda
@@ -82,6 +83,7 @@ correlation  std.err     t.value  p.value
 Agora com a idade podemos observar uma tendência relativamente diferente. Assim como com a escolaridade, há uma relação positiva entre renda e idade. No entanto, vemos também que é uma relação não linear, pois o crescimento da renda permanece quase constante até 40 anos, quando começa a crescer cada vez menos até se estabilizar. É um crescimento parecido com o comportamento de uma curva logarítmica.
 
 correlation  std.err       t.value   p.value
+
 0.12         0.002103803   57.85659  >0.001
 
 ### Experiência e renda
@@ -91,6 +93,7 @@ correlation  std.err       t.value   p.value
 Agora com a experiência vemos outro comportamento na relação com a renda, mas ainda muito distante de ser um comportamento próximo de uma aleatoriedade que indique a possibilidade de independência. Vemos que há uma relação entre renda e experiência, que é igual à uma parábola: positiva até aprox. 12 anos, com estabilidade até aprox. 32 anos e queda deste ponto em diante. Se lembrarmos da análise univariada da experiência, teremos que as faixas com menor experiência são os mais jovens ou adultos com muitos anos de estudos. Conforme vimos no gráfico anterior, essa faixa etária está em crescimento constante de renda até atingir um pico de estabilização, o que vemos também refletido na experiência (uma vez que está em função da idade menos anos de estudo e menos a constante 6). A queda aqui representada para pode estar associada aos casos de pessoas mais idosas que não acessaram a escola e, portanto, possuem menor anos de estudo.
 
 correlation   std.err     t.value  p.value
+
 0.018         0.002119182 8.938071 3.989427e-19
 
 ### Calculando correlações
