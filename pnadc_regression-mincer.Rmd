@@ -1,0 +1,556 @@
+---
+title: "Exercício Regressão Linear"
+author: "Victor Alcantara"
+date: "14/05/2021"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+# 0. Carregando pacotes e abrindo os dados 
+# Dados sobre mercado de trabalho no Brasil: 1º trimestre/2019 da Pnad-contínua
+
+```{r, warning = FALSE, message = FALSE}
+library(PNADcIBGE) # Para importar dados da Pnad contínua
+library(tidyverse) # Para organizar e analisar os dados
+library(Hmisc)     # Para análises com peso amostral
+library(weights)   #
+library(ggplot2)   # Para gráficos
+library(ggExtra)   # Para funções extra do ggplot
+library(rio)       # R Imput Output
+require(fst)       # FST é requisito para o RIO salvar nesse formato
+```
+
+# 1. Selecionando variáveis e filtrando casos
+# verbos select e filter
+
+1. (V2009)  Idade do morador na data de referência
+2. (VD3005) Anos de estudo (pessoas de 5 anos ou mais de idade) padronizado para o Ensino fundamental com duração de 9 anos
+3. (VD4016) Rendimento mensal habitual do trabalho principal para pessoas de 14 anos ou mais de idade (apenas para pessoas que receberam em dinheiro, produtos ou mercadorias no trabalho principal)
+4. (V1027)  Peso do domicílio e das pessoas (Peso trimestral com correção de não entrevista com pós estratificação pela projeção de população)
+
+```{r, warning=FALSE}
+wd <- ("C:/Users/Victor/estatistica/dados/PNAD/")
+
+mydata <- import(paste0(wd, 2019, "/pnadc_", 2019,"-1q.fst")) %>% 
+               
+               select(V2009, VD3005,VD4016,V1027) %>% 
+  
+               rename(.,  idade        = V2009,
+                          escolaridade = VD3005,
+                          renda        = VD4016,
+                          peso         = V1027) %>%
+
+                filter(renda > 0,                
+                       idade %in% 18:65)
+
+```
+
+# 2. Computando modificações necessárias
+# verbos as.numeric, log(), ifelse
+
+```{r}
+mydata <- mydata %>% 
+          mutate(., escolaridade = as.numeric(escolaridade),
+                    ln.renda     = log(renda),
+                    exp          = idade - escolaridade - 6, # exp de Mincer
+                    exp          = ifelse(exp < 0, 0, exp) ) 
+```
+
+# 3. Colocando a mão na massa 
+```{r}
+# Antes de tudo, conferir o banco de dados
+summary(mydata)
+
+# Salvando o banco após tratamento para a análise
+#setwd("C:/Users/Victor/estatistica/dados/PNAD/2019 trimestral/")
+
+#write.csv(mydata, file = "mydata.csv", row.names = FALSE) # Opção 1 para salvar o recorte da base de dados em formato CSV
+
+#mydata <- read.csv("mydata.csv" ) # Abrindo o recorte
+
+#save( mydata, file = paste0(wd, "mydata.RData" ) ) # Opção 2 para salvar o recorte da base de dados em formato RDS
+
+#load( paste0(wd, "mydata.RData" ) ) # Abrindo o recorte
+
+dim(data)
+dim(mydata) # Diminuiram os casos após os filtros, e as var após a seleção
+
+# média, primeiro quartil, segundo quartil (mediana), terceiro quartil, desvio-padrão e variância para idade, escolaridade, renda e logaritmo da renda
+
+# Para computar uma função com vários objetos diferentes, podemos usar o loops para mecanizar a sequência de comandos.
+
+for(i in c("idade", "escolaridade", "renda", "ln.renda")) {
+         media <- wtd.mean(x = mydata[i], weights = mydata$peso, na.rm = T)
+    print(media)
+     }
+
+# Porém, como queremos mais de uma operação para diferentes objetos, vamos computar uma nova função que faça todas as operações que precisamos para cada objeto.
+
+my_stats <- function(data, x, y, na.rm) {
+    media     <- wtd.mean(x = data[,x], weights = data[,y], na.rm = na.rm)
+    variancia <- wtd.var (x = data[,x], weights = data[,y], na.rm = na.rm)
+    quantis   <- wtd.quantile(x = data[,x], weights = data[,y], 
+                 probs = c(0.25,0.5,0.75), na.rm = na.rm) 
+    
+    stats <- list(quantis = quantis, media = media, variancia = variancia,
+                  dp = sqrt(variancia)) # Em lista por conta dos quantiles
+    print(stats)
+    rm(stats)
+}
+
+# Com essa função podemos calcular todas as medidas de tendência central e de dispersão para cada objeto (variável). Note que o desvio-padrão é dado pela raiz da variância, e por isso aparece computado dentro da lista.
+
+```
+
+# Escolaridade
+```{r fig.align="center", warning = FALSE, message = FALSE}
+options(scipen = 999) # Para excluir a notação científica
+
+my_stats(data = mydata, x = "escolaridade", y = "peso", na.rm = T)
+
+mydata %>% ggplot(aes(x = escolaridade, weight = peso))+
+      geom_bar()+
+        theme_bw()+
+        ggtitle("Anos de estudo")+
+        scale_y_continuous(name = "Frequência" )+
+        scale_x_continuous(name = "Anos de estudo",
+                           breaks = seq(from = 0, to = 17, by = 1))+
+        labs(caption = "Fonte: 1º trim./Pnad-contínua 2019")
+```
+
+Com o gráfico de barras acima podemos observar uma concentração de pessoas com 13 anos de estudo, o que corresponde ao Ensino Médio completo, uma parcela significativa com 17 anos de estudo, o que corresponde ao Ensino Superior completo, e grupos minoritários com 6 e 10 anos de estudo, o que corresponde, respectivamente, ao Ensino Fundamental incompleto e completo. 
+
+É importante lembrar que estamos trabalhando com um recorte da amostra com pessoas com renda e idade entre 18-64 anos. Portanto, os anos de escolaridade representados no gráfico não refletem os níveis de escolaridade alcançado pela população.
+
+# Idade
+```{r fig.align="center", warning = FALSE, message = FALSE}
+my_stats(data = mydata, x = "idade", y = "peso", na.rm = T)
+
+mydata %>% ggplot(aes(x = idade, weight = peso))+
+    geom_bar()+
+        theme_bw()+
+        ggtitle("Idade")+
+        scale_y_continuous(name = "Frequência")+
+        scale_x_continuous(name = "Idade" ,
+                           limits = c(18,65),
+                           breaks = seq(18,64,2)
+                           )+
+        labs(caption = "Fonte: 1º trim./Pnad-contínua 2019")
+```
+
+Com o gráfico de barras acima podemos observar uma concentração de pessoas entre 24 e 50 anos, o que corresponde à uma parcela da população em idade ativa, com uma tendência à redução de pessoas com idade acima de 50 anos. Como a idade é uma variável métrica contínua, podemos representar também por um histograma com faixas etárias.
+
+# Experiência
+```{r}
+my_stats(data = mydata, x = "exp" ,y = "peso", na.rm = T)
+
+mydata %>% ggplot(aes(x = exp, weight = peso))+
+    geom_bar()+
+      theme_bw()+
+      ggtitle("Experiência")+
+      scale_y_continuous(name = "Frequência")+
+      scale_x_continuous(name = "Experiência",
+                         breaks = seq(from = 0, to = 60, by = 5) )+
+      labs(subtitle = "exp. = Idade - Anos de estudo - 6",
+           caption = "Fonte: 1º trim./Pnad-contínua 2019")
+```
+
+O gráfico de barras acima representa a frequência de observações nos determinados anos de experiência, que foi calculado em função da idade, dos anos de estudo e de uma constante 6. Compreende-se que a experiência é igual a idade menos os anos de estudo e a constante 6. Indivíduos com 18 anos de idade e 16 anos de estudo, por exemplo, teriam experiência menor que zero. Pela impossibilidade lógica de uma pessoa ter menor que zero anos de experiência, computou-se todos os valores negativos como zero. Já indivíduos com 64 anos e 16 anos de estudo teriam 42 anos de experiência, enquanto que os com 0 anos de estudos teriam 58 anos de experiência. No limite, portanto, temos que a experiência pode variar de 0 - 58 anos em nosso recorte da amostra. Os casos com experiência até 35 anos são mais frequentes, enquanto que há uma tendência de decrescimento da frequência de casos com mais de 35 anos de experiência. Podemos inferir, por exemplo, que essa tendência acompanha o decrescimento da população com idade superior à 50 anos, como observamos no gráfico relativo à idade.
+
+# Renda
+```{r fig.align="center", warning = FALSE, message = FALSE}
+my_stats(data = mydata, x = "renda", y = "peso", na.rm = T)
+
+mydata %>% ggplot(aes( x = renda, weight = peso)) +
+    geom_histogram(binwidth = 5000)+
+      theme_bw()+
+      scale_y_continuous(name = "frequência",
+                         limits = c(0,50000),
+                         breaks = seq(0,50000,10000))+
+      scale_x_continuous(name = "renda",
+                         limits = c(0,255000),
+                         breaks = seq(0,255000,25000)
+                         )+
+      labs(title = "",
+           caption = "")
+```
+
+O histograma acima representa a frequência de casos com determinada renda, dada entre faixas agrupadas pelas barras. Podemos observar que há uma concenração de casos entre 2.500 e 5.000, com algumas observações distantes da concentração em aproximadamente 15, 17.5 e 25 mil.
+
+```{r fig.align="center", warning = FALSE, message = FALSE}
+my_stats(data = mydata, x = "ln.renda", y = "peso", na.rm = T)
+
+mydata %>%
+ggplot(aes( x = ln.renda, weight = peso)) +
+geom_histogram()+
+    theme_bw()+
+    scale_y_continuous(name = "frequência")+
+    scale_x_continuous(name = "log da renda")+
+    labs(title = "",
+         caption = "Fonte: 1º trim./Pnad-contínua 2019")
+
+```
+
+O histograma acima representa a frequência de casos com o logarítmo natural de determinada renda, ou em outras palavras a renda logaritmizada. Note que o log é uma operação inversa da exponencial, e portanto comprime a distância entre os casos, ao invês de atenuar. O log de 1000 na base 10, por exemplo, é 3, ou em outras palavras, 10 elevado a 3 é 1000.  Os casos com renda logaritmizada igual a 5 correspondem à base do log natural (e = 2.71) elevada a 5, ou 143.48. Nessa mesma lógica, os casos com log da renda em 10 corresponde à 20.589.11. 
+A transformação logarítmica é frequentemente usada para corrigir a assimetria de variáveis, como renda e população, que têm um pequeno número de observações com valores positivos extremamente grandes ou pequenos e muito distantes da concentração. Com a renda logaritmizada, as distâncias entre as observaçoes são comprimidas, fazendo com que o enviesamento/assimetria (skewness) seja eliminado e a distribuição seja mais próxima de uma distribuição normal.
+
+```{r fig.align="center", warning = FALSE, message = FALSE}
+mydata %>% ggplot(aes( y = renda, x = escolaridade, weight = peso)) +
+    geom_point()+
+      theme_bw()+
+      ggtitle("Renda | Escolaridade")+
+      scale_y_continuous(name   = "Renda",
+                         limits = c(0,255000))+
+      scale_x_continuous(name = "Escolaridade")+
+      labs(subtitle = "relação da renda em função da escolaridade",
+           caption = "1º trim./Pnad-contínua 2019")
+```
+
+O gráfico de dispersão acima representa as observações dada a escolaridade e a renda. Em geral, a variável a ser explicada (dependente) é colocada no eixo vertical (y), no sentido de que está em função de outras variáveis que podem ser explicativas. Embora fosse esperado uma correlação entre escolaridade e renda, não é muito perceptível essa informação no gráfico. Podemos observar em um grau moderado que há mais casos com renda elevada conforme aumenta a escolaridade. Vemos ainda que a variável escolaridade é métrica discreta e reflete seu comportamento no gráfico, com pontos de observação aglomerados que se aproximam graficamente de linhas verticais.
+
+
+# Médias ponderadas dos grupos de renda condicionados à escolaridade
+```{r fig.align="center", warning = FALSE, message = FALSE}
+# nova base com a média ponderada(!) para cada grupo correspondente ao x anos de escolaridade
+newdata1 <- mydata %>% group_by(escolaridade) %>% 
+    summarise(media.renda = weighted.mean(renda))
+
+newdata1 %>%
+ggplot(aes( y = media.renda, x = escolaridade)) +
+geom_point()+
+    ggtitle("Média(Renda | Escolaridade)")+
+    scale_y_continuous(name = "Renda")+
+    scale_x_continuous(name = "Escolaridade")+
+    labs(subtitle = "Média da renda em função da escolaridade",
+         caption = "Fonte: 1º trim./Pnad-contínua 2019")
+
+```
+
+O gráfico de dispersão acima representa as médias dos grupos de renda em função da escolaridade. Podemos observar com maior clareza a relação positiva entre escolaridade e renda. Conforme cresce os anos de escolaridade, cresce a média da renda nos grupos.
+
+```{r fig.align="center", warning = FALSE, message = FALSE}
+newdata1 %>%
+ggplot(aes( y = log(media.renda), x = escolaridade)) +
+geom_point()+
+    ggtitle("Média( log(Renda) | Escolaridade )")+
+    scale_y_continuous(name = "log da renda")+
+    scale_x_continuous(name = "Escolaridade")+
+    labs(subtitle = "Média da renda logaritmizada em função da escolaridade",
+         caption = "Fonte: 1º trim./Pnad-contínua 2019")
+```
+
+O gráfico acima representa a média da renda logaritmizada em função da escolaridade. Complicado, não é? Mas podemos observar aqui que a função logaritmo da renda opera apenas como uma compressão das distâncias entre os casos. Vemos acima que a relação entre o log(renda) e escolaridade é exatamente igual à da renda, conforme o gráfico anterior. A diferença está no eixo vertical (y), em que podemos ver a maior proximidade entre as rendas, o que não interfere na análise de correlação.
+
+```{r fig.align="center", warning = FALSE, message = FALSE}
+newdata2 <- mydata %>% group_by(idade) %>% 
+    summarise(media.renda = weighted.mean(renda))
+
+newdata2 %>%
+ggplot(aes( y = media.renda, x = idade)) +
+geom_point()+
+    ggtitle("Média(Renda | Idade)")+
+    scale_y_continuous(name = "Renda")+
+    scale_x_continuous(name = "Idade")+
+    labs(subtitle = "Média da renda em função da idade",
+         caption = "Fonte: 1º trim./Pnad-contínua 2019")
+```
+
+Agora com a idade podemos observar uma tendência relativamente diferente. Assim como com a escolaridade, há uma relação positiva entre renda e idade. No entanto, vemos também que é uma relação não linear, pois o crescimento da renda permanece quase constante até 40 anos, quando começa a crescer cada vez menos até se estabilizar. É um crescimento parecido com o comportamento de uma curva logarítmica.
+
+# Experiência e renda
+```{r fig.align="center", warning = FALSE, message = FALSE}
+newdata3 <- mydata %>% group_by(exp) %>% 
+    summarise(media.renda = mean(renda))
+
+newdata3 %>%
+ggplot(aes( y = media.renda, x = exp)) +
+geom_point()+
+    ggtitle("Média( Renda | Experiência )")+
+    scale_y_continuous(name = "Renda")+
+    scale_x_continuous(name = "Experiência",
+                       breaks = seq(0,64,4))+
+    labs(subtitle = "relação da renda em função da experiência",
+         caption = "Fonte: 1º trim./Pnad-contínua 2019")
+```
+
+Agora com a experiência vemos outro comportamento na relação com a renda, mas ainda muito distante de ser um comportamento próximo de uma aleatoriedade que indique a possibilidade de independência. Vemos que há uma relação entre renda e experiência, que é igual à uma parábola: positiva até aprox. 12 anos, com estabilidade até aprox. 32 anos e queda deste ponto em diante. Se lembrarmos da análise univariada da experiência, teremos que as faixas com menor experiência são os mais jovens ou adultos com muitos anos de estudos. Conforme vimos no gráfico anterior, essa faixa etária está em crescimento constante de renda até atingir um pico de estabilização, o que vemos também refletido na experiência (uma vez que está em função da idade menos anos de estudo e menos a constante 6). A queda aqui representada para pode estar associada aos casos de pessoas mais idosas que não acessaram a escola e, portanto, possuem menor anos de estudo.
+
+Vamos ver com o log da renda como fica.
+
+```{r fig.align="center", warning = FALSE, message = FALSE}
+newdata3 %>%
+ggplot(aes(y = log(media.renda), x = exp)) +
+geom_point()+
+    ggtitle("Média( log(Renda) | Experiência )")+
+    scale_y_continuous(name = "Renda")+
+    scale_x_continuous(name = "Experiência",
+                       breaks = seq(0,64,4))+
+    labs(subtitle = "relação da renda em função da experiência",
+         caption = "Fonte: 1º trim./Pnad-contínua 2019")
+```
+
+Viu? Não mudou em nada na relação, conforme vimos com a escolaridade.
+
+Já que estamos começando a falar de correlações, vamos calcular a correlação entre variáveis métricas com o famoso para ver o quanto essas variáveis estão correlacionadas.
+
+Para isso usamos o famoso ... Coeficiente de correlação! :D
+E no nosso caso ainda temos o peso (weights ou wtd)
+```{r fig.align="center", warning = FALSE, message = FALSE}
+# 1. Escolaridade e renda.
+wtd.cor(mydata$renda, mydata$escolaridade)
+
+# 2. Escolaridade e log da renda
+wtd.cor(mydata$ln.renda, mydata$escolaridade)
+
+# 3. experiência e renda
+wtd.cor(mydata$renda, mydata$exp)
+
+# 4. experiência e log da renda
+wtd.cor(mydata$ln.renda, mydata$exp)
+```
+
+Agora estamos falando de correlação. E opa! Temos uma correlação diferente quando consideramos a renda logaritmizada!!! Viu? Mas vimos antes que a relação não muda graficamente, não é mesmo? Então vamos abrir a caixa-preta para entender quando é que o nosso avião caiu.
+
+A lógica do cálculo de uma correlação tem a ver com o tamanho da variação de nossa variável de interesse. Sabemos que ela sozinha possui uma variação que, para fins didáticos, chamemos de variação total. Quando condicionamos ela à uma outra variável, podemos observar como se comporta a variação dela em função da segunda variável. No exemplo da renda e escolaridade, fizemos a média da renda para cada grupo com determinado x anos de escolaridade, lembra? Se a variação da renda condicionada à escolaridade é menor do que a variação total da renda, então estamos explicando uma parte, não é mesmo?
+Se em uma população a renda possui uma variação X, e vimos que se separarmos a população em grupos de escolaridade, esses grupos são mais homogêneos (possuem menos variação), então podemos dizer que parte da variação da renda se deve à diferença de escolarização entre os grupos... e então estamos explicando a heterogeneidade da renda (variação)... e então podemos incluir mais outro condicionante e explicar a renda ainda mais... e então saberemos o que faz o rico ficar rico e o pobre ficar pobre... e ...
+
+Eita pera lá, muita calma ladrão...
+
+Esqueceu que nosso problema é o por quê da correlação da renda logaritmizada ser mais forte?
+
+Pois então. Ainda que a relação seja a mesma, na prática, o logaritmo da renda é algo diferente da renda original. Um outro tipo de informação. Nossa variável dependente não está mais mensurada em `R$`, mas em algum tipo de unidade de medida estranha. E, obviamente, isso altera a interpretação dos coeficientes. Numa regressão com renda (não modificada) como variável dependente, leríamos: “um ano mais de escolaridade está associado ao aumento de 𝛽1 `R$` na renda”. Mas agora, temos algo que soa esquisito: “um ano mais de escolaridade está associado ao aumento de 𝛽1 no logaritmo da renda”.
+
+Tendo a lógica da correlação, sabemos que estamos querendo explicar a heterogeneidade (variação) da renda. O conceito de heterogeneidade está associado a noção de distância entre as partes de um todo. Do contrário, falaríamos de homogeneidade. Se o logarítmo é uma função que diminui a distância entre as observações, ou entre as partes do todo, logo teremos menos heterogeneidade, e assim um coeficiente de correlação mais forte. Pode ser que esteja errado e eu esteja exagerando, mas o erro e o exagero fazem parte da profissão (Weber, 1920).
+
+# 4. Voltando ao modelo de Mincer
+
+Os resultados sobre a variável experiência mostram que a relação com a renda é uma espécie de parábola, não é? Uma curva que sobe, atingindo um máximo em certo ponto, e depois desce. Bem, essa é a razão pela qual na equação de Mincer experiência está aparecendo duas vezes: uma sem quadrado e outra com quadrado. Pode ser que vocês não se lembrem muito da Matemática de Ensino Médio; mas “coisas ao quadrado” são parábolas. E parábolas possuem um formato padrão de equação:
+
+𝑦=𝑎𝑥^2 +𝑏*𝑥+𝑐
+
+Em princípio, apenas 𝑦=𝑥2 já nos fornece uma parábola. experimente, por exemplo, substituir 𝑥 por -3, -2, -1, 0, 1, 2, 3 então calcular os respectivos valores de 𝑦. Sério! Faça isso e plote o gráfico (pode ser até no Excel). Você vai ver a parábola se formar.
+
+```{r fig.align="center", warning = FALSE, message = FALSE}
+x <- seq(from = -5, to = 5, by = 1)
+
+plot(x = x, y = -x^2,type = "b")
+```
+
+O que vamos ter é uma parábola com “a boca virada pra baixo”, que passa pelo ponto (0,0), a “origem” das coordenadas cartesianas. O que a equação acima, 𝑦=𝑎𝑥2+𝑏𝑥+𝑐, traz de diferente? Ela fornece uma expressão geral para toda e qualquer parábola: virada pra cima ou pra baixo; com a concavidade mais aberta ou mais fechada; centrada em qualquer lugar do gráfico; com as “pernas” da curva mais ou menos simétricas... etc. Essa expressão mais completa, também chamada de equação de segundo grau (porque tem uma variável elevada a dois!), não é só formada pelo termo quadrático: ela contem também um 𝑥 que não está elevado a 2 (o chamamos de termo linear) e contém ainda um termo constante,𝑐, que não está ligado ao 𝑥.
+
+Observe a equação de Mincer novamente. Ela contém: 𝛽0 + 𝛽2𝑋+𝛽3𝑋^2. 
+
+Ora, esses são exatamente os mesmos termos da equação de segundo grau. A parábola (aproximada) formada pela experiência incorre exatamente no caso citado no parágrafo anterior: ela é uma parábola mais complexa, que, para ser desenhada, precisa do termo quadrático, do termo linear e de uma constante. Por padrão, a constante já está sempre na regressão: é o intercepto, o termo que não está ligado a nenhuma variável. O que precisaremos fazer então é incluir um termo quadrático e um termo linear, quando formos estimar a regressão. Isso permite que o R tente ajustar a curva com mais flexibilidade. Se ele encontrar uma “parábola meio torta”, ele vai conseguir estimar, ajustando os valores dos coeficientes 𝛽2 e 𝛽3.
+
+Se o R descobrir que o termo linear não é necessário e que apenas 𝐸𝑥𝑝𝑒𝑟𝑖ê𝑛𝑐𝑖𝑎2 já é suficiente, então o valor estimado para o coeficiente do termo linear será igual a zero (isto é: teremos 𝛽2=0). Assim, 𝛽2𝑋𝑖 iria resultar em 0×𝑋𝑖=0, cancelando o termo. Se, ao contrário, o R descobrir que não se trata de uma parábola, mas sim de uma reta, quem vai ser igual a zero é o 𝛽3. E teríamos 𝛽3𝑋𝑖2=0×𝑋𝑖2=0. Assim voltaríamos, na prática, a um comportamento linear convencional da relação entre experiência e renda. O ajuste, no final das contas, é empírico. Por isso, é necessário incluir tanto o termo linear quanto o quadrático, quando se suspeita que a relação entre a variável independente e a dependente forma um desenho aproximado de uma parábola.
+
+O que precisamos saber:
+1. Relações entre variáveis que apresentaram um “sobe e desce” nos diagramas de dispersão são modeladas com parábolas
+2. Parábolas são obtidas por meio da inclusão de um termo quadrático como variável independente numa regressão – com manutenção do termo linear (pois aí teremos flexibilidade para ajustar diversos desenhos de parábolas).
+3. Em suma: a parábola é obtida por meio de uma transformação no 𝑥 (a variável independente de interesse), não no 𝑦 (a variável dependente): é o 𝑥 que é elevado ao quadrado!
+
+Uma coisa importante se altera: a leitura e a interpretação dos coeficientes. As variáveis que apenas possuem termo linear são muito simples de ler, porque são retas, funções de primeiro grau. Nesse caso, o coeficiente de regressão ligado à variável que é apenas linear expressa a inclinação da reta. Considere, por exemplo a regressão múltipla abaixo:
+
+𝑦𝑖=𝛽0+𝛽1𝑥𝑖1+𝛽2𝑥𝑖2+𝜖𝑖
+
+Mas quando uma mesma variável possui um termo quadrático e um termo linear, a interpretação passa a não ser mais essa. Tomem o exemplo abaixo:
+
+𝑦𝑖=𝛽0+𝛽1𝑥𝑖1+𝛽2𝑥𝑖12+𝜖𝑖
+
+Aqui temos duas vezes a mesma variável, 𝑥𝑖1: na versão linear e na versão quadrática. Quando 𝑥𝑖1 aumenta, esse aumento é simultâneo nos dois termos – pois se trata, como já dito, da mesma variável. Isso significa que 𝛽1𝑥𝑖1+𝛽2𝑥𝑖12 deve ser encarado como uma unidade indissociável. Não é possível interpretar 𝛽1 separadamente de 𝛽2. Além disso, cabe destacar que uma parábola não possui a mesma inclinação em todas as suas partes. Por essa razão os coeficientes da expressão 𝛽1𝑥𝑖1+𝛽2𝑥𝑖12 não podem ser lidos como indicando apenas inclinação.
+
+Isso pode parecer complicado à primeira vista, mas tem uma interpretação bastante intuitiva: nas primeiras quantidades 𝑥 têm um grande efeito sobre 𝑦; mas quantidades adicionais de 𝑥 vão tendo cada vez menos efeito, até que então a direção se inverte. Pense em doses de um remédio, por exemplo: cada gota adicional de analgésico tem um efeito positivo sobre seu bem-estar (reduzindo uma dor de cabeça, por exemplo), até chega um ponto em que você começa a se intoxicar e o efeito passa a ser o oposto. Sabe aquela frase da sua avó: “tudo o que é demais faz mal”? Então... era, na realidade, uma parábola!
+
+No caso da experiência no mercado de trabalho, o que estaria ocorrendo? A Teoria do Capital Humano sustenta que o capital humano, assim como o físico, se deprecia com o tempo: esquecemos conhecimentos, nos tornamos obsoletos, nossa saúde e nossa disposição para produzir minguam... Assim, pessoas com muitos anos de experiência passam a experimentar quedas salariais.
+
+Quando as variáveis tem efeito em forma de parábola, é muito mais fácil avaliar o que está acontecendo de maneira gráfica. Produzimos um conjunto de valores preditos e então plotamos para tentar compreender o resultado. Existem, na realidade, modos um pouco mais sofisticados para entender o que está acontecendo e estudar esses efeitos não lineares. Mas isso é matéria para Lego II.
+
+As parábolas são um caso particular da chamada Regressão Polinomial: na verdade, podemos ajustar quase qualquer desenho de curva apenas com a inclusão de polinômios de grau mais elevado (i.e. termos que estão elevados a potências maiores). E vejam só... no final, a regressão chamada “linear” são é apenas linear. Com alguns ajustes e modificações, conseguimos desenhar parábolas e diversas outras curvas.
+
+Mas vamos continuar ao trabalho seguindo os passos para aplicar o modelo de Mincer.
+
+# 5. It's time to regression!
+```{r}
+# experiência ao quadrado (uma parábola!)
+mydata$exp2 <- mydata$exp^2
+
+fit <- lm(renda ~ exp, data = mydata, weights = peso)
+summary(fit)
+
+fit2 <- lm(renda ~ exp + exp2, data = mydata, weights = peso)
+summary(fit2)
+```
+
+No primeiro modelo de regressão estimado estamos considerando o efeito da experiência na renda com um termo linear, o que não é adequado, pois sabemos que o comportamento dessa relação é mais parecido com o de uma parábola e uma função linear não pode defini-lo. Estamos decompondo a variação de Y (renda) em dois termos, e a informação adicionada da experiência quadrática reduz a explicação da experiência linear e acrescenta uma informação sobre o comportamento da relação. Esse acrescimo de informação ou explicação do segundo modelo pode ser observado pela estatística R2. Para o primeiro modelo, estamos explicando muito pouco da variação da renda (0.0001), enquanto que no segundo aumentamos nossa explicação significativamente (0.0164).
+
+O erro de reduzir uma relação não linear em uma função linear pode ser observado no gráfico seguinte:
+
+# Observando o erro da função linear em uma parábola
+```{r fig.align="center", warning = FALSE, message = FALSE}
+newdata3 %>%
+     ggplot(aes( y = media.renda, x = exp)) +
+     geom_point()+
+     ggtitle("Média( Renda | experiência )")+
+     scale_y_continuous(name = "Renda")+
+     scale_x_continuous(name = "experiência",
+                        breaks = seq(0,64,4))+
+     labs(subtitle = "Observando o erro da regressão linear",
+          caption = "Fonte: 1º trim./Pnad-contínua 2019")+
+     geom_smooth(aes(), method = lm, se = T, fullrange = T)
+```
+
+# Renda e educação
+```{r}
+fit3 <- lm(ln.renda ~ escolaridade, data = mydata, weights = peso)
+summary(fit3)
+
+fit4 <- lm(ln.renda ~ escolaridade + exp + exp2, data = mydata, weights = peso)
+summary(fit4)
+```
+
+Analisando a relação entre renda, escolaridade e a experiência, podemos observar a mesma diferença discutida anteriormente. No primeiro modelo consideramos apenas a escolaridade como fator linear explicativo da renda, onde observamos que a cada uma unidade de escolaridade, aumentamos 0.1 no logarítmo da renda (o que é difícil de interpretar). Neste modelo temos o R2 0.22, o que representa uma explicação significativa. 
+O segundo modelo acrescenta as variáveis experiência e experiência ao quadrado. Neste observamos que houve um aumento do coeficiente em relação às três variáveis analisadas sózinhas, anteriormente. Além disso, nossa explicação sobre a variação da renda aumentou para R2 0.286. Essa mudança se deve à interação estatística entre as variáveis. Neste caso, vemos que experiência e escolaridade estão mutuamente relacionadas, uma fortalecendo o efeito da outra sobre a renda; o que faz sentido quando olhamos para a formula da experiência por Mincer, que tem a experiência em função da escolaridade.
+
+```{r fig.align="center", warning = FALSE, message = FALSE}
+newdata <- data.frame(idade = 11+6+c(0:50),
+                      escolaridade = rep(11,51),
+                      exp = c(0:50),
+                      exp2 = c(0:50)^2 )
+
+preditos <- predict(fit4, newdata = newdata)
+
+plot(y = preditos, x = c(0:50),
+     main = "Predições com a regressão",
+     ylab = "Valores preditos pela regressão",
+     xlab = "idades 0-50 anos")
+
+```
+
+O gráfico acima representa os valores preditos da regressão para indivíduos com idade de 0-50 anos. Observamos que entre 45 e 50 anos o logarítmo da renda começa a cair, o que sugere que nessa idade muda o efeito na renda, tendendo a cair.
+
+# Análise gráfica dos resíduos da regressão
+```{r fig.align="center", warning = FALSE, message = FALSE}
+plt1 <- ggplot()+
+    geom_point(aes(x = fitted(fit4), y = resid(fit4)))+
+    theme_classic()+
+    ggtitle("Distribuição dos resíduos da regressão: valores preditos")+
+    scale_x_continuous(name = "Valores preditos",
+                        limits =  c(4, 9))+
+    scale_y_continuous(name = "Resíduos",
+                        limits = c(-5,5))+
+    labs(subtitle = "Analisando a homocedasticidade",
+         caption = "")+
+    geom_hline(yintercept = 0, color = "blue")
+
+ggMarginal(plt1,type="histogram", groupFill = F,alpha = 0.5, 
+           margins = "y")
+
+
+```
+
+# Resíduos vs escolaridade
+```{r fig.align="center", warning = FALSE, message = FALSE}
+plt2 <- mydata %>% ggplot()+
+    geom_point(aes(x = escolaridade, y = resid(fit4)))+
+    theme_classic()+
+    ggtitle("Distribuição dos resíduos da regressão: escolaridade")+
+    scale_x_continuous(name = "Escolaridade"
+                        #limits =  c(4, 9)
+                        )+
+    scale_y_continuous(name = "Resíduos",
+                        limits = c(-5,5))+
+   labs(subtitle = "Analisando a homocedasticidade",
+         caption = "")+
+    geom_hline(yintercept = 0, color = "blue")
+
+ggMarginal(plt2,type="histogram", groupFill = F,alpha = 0.5, 
+           margins = "y")
+```
+
+Os gráficos acima representam a dispersão dos valores preditos para as idades 0-50 (plt1) e para os anos de escolaridade (plt2), ambos em relação aos resíduos. Portanto, temos a reta estimada pela regressão, que é traçada na menor distância entre os resíduos (linha azul do marco 0 no eixo vertical), como uma aproximação da média da renda (Y) condicionada às variáveis (X). Podemos observar que os resíduos se concentram homogeneamente ao redor da reta de regressão estimada, o que respeita o pressuposto da homocedasticidade. Em outras palavras, a variação em torno da reta de regressão é mais próxima de uma constante, não muda muito. Vemos também que os resíduos estão normalmente distribuídos. No histograma na margem à direita, podemos observar que a distribuição dos resíduos é muito próxima de uma distribuição em sino como a da curva normal.
+
+# 6. Aplicando nas PNAD's contínuas de 2012-2020
+
+```{r fig.align="center", warning = FALSE, message = FALSE}
+# ano <- c(2019)
+# for(i in 1:length(ano)) {
+#     print(i)
+#     ano_i <- ano[i]
+#     pnad_i <- get_pnadc(year = ano_i, quarter = 1,
+#                               design = F, labels = T)
+#      export(pnad_i, paste0(wd, ano_i , "/pnadc_", ano_i, "-1q.fst") )
+#      export(pnad_i, paste0(wd, ano_i , "/pnadc_", ano_i, "-1q.csv") )
+#                }
+
+ano = c(2012:2019)
+
+reg <- data.frame(intercept    = rep(NA,8),
+                  escolaridade = rep(NA,8),
+                  exp          = rep(NA,8),
+                  exp2         = rep(NA,8) )
+
+for(i in 1:length(ano)) {
+			print(i)   # --- para imprimir no console cada iteração
+			ano_i       <- ano[i] # pega o 'i' ano e guarda no objeto ano_i
+			arquivo_i <- paste0(ano_i, "/pnadc_", ano_i, "-1q.fst") # Caminho para o arquivo_i do ano_i
+			
+			data <- import( paste0(wd, arquivo_i) )%>% # abre o arquivo_i do ano_i
+    
+			  select(V2009, VD3005,VD4016,V1027) %>% # seleciona essas var
+    
+			  rename(., idade        = V2009,        # renomeie as var
+                  escolaridade = VD3005,
+                  renda        = VD4016,
+                  peso         = V1027) %>% 
+        filter(renda > 0, idade %in% 18:65) %>% # filtra idade
+          
+			  mutate(., escolaridade = as.numeric(escolaridade), # Faça modificações
+                    ln.renda   = log(renda),
+                    exp        = idade - escolaridade - 6, # exp de Mincer
+                    exp2       = exp^2,
+                    exp        = ifelse(exp < 0, 0, exp) ) 
+			
+			fit <- lm(ln.renda ~ escolaridade + exp + exp2, data = data, weights = peso) # Regressão modelo de Mincer
+			
+			reg[i,] <- fit$coefficients # vai na lista da regressão e pega os coef
+      
+			rm(data,fit) # Remova o objeto
+      gc()
+    }
+
+save(reg, file = paste0(wd, "reg-mincer-pnad12-19.RData" ) )
+
+reg$ano <- ano
+
+reg %>% ggplot(aes(x = ano, y = escolaridade))+
+  theme_classic()+
+  geom_line(lwd = 1)+
+  labs( title = "Retornos em educação 2012-2019",
+        subtitle = "Modelo de Mincer",
+        caption = "Fonte: PNADc/IBGE 2012-2019.")+
+  scale_x_continuous(name = "Anos",
+                     breaks =  (seq(2012,2019,1)) )+
+ scale_y_continuous(name = "Coecifiente de educação",
+                    limits =  c(0,0.15))
+
+```
+
+O gráfico acima representa a variação do coeficiente angular da educação estimado pela equação de Mincer entre os anos 2012 e 2019 da PNAD contínua. O coeficiente indica quanto da renda logaritmizada (y) varia em uma unidade de aumento em educação (x). Como estamos trabalhando com a renda logaritmizada, a variação em renda é difícil de ser interpretada. Cada valor representa o logarítmo natural da renda (base euler = 2.7). Portanto, 2.7^0.01 representa o aumento em 1 real na renda. 
+Embora com pouca variação, podemos observar que o retorno em educação cai entre 2012 e 2014, quando começa a aumentar até 2019. Isso indica que a partir de 2014 houve um crescimento constante do retorno em educação, embora pouco expressivo i.e. com pouca variação.
+Com uma manipulação do eixo vertical (y), podemos observar com maior detalhe a tendência.
+
+```{r fig.align="center", warning = FALSE, message = FALSE}
+reg %>% ggplot(aes(x = ano, y = escolaridade))+
+  theme_classic()+
+  geom_line(lwd = 1)+
+  labs( title = "Retornos em educação 2012-2019",
+        subtitle = "Modelo de Mincer",
+        caption = "Fonte: PNADc/IBGE 2012-2019.")+
+  scale_x_continuous(name = "Anos",
+                     breaks =  (seq(2012,2019,1)) )+
+ scale_y_continuous(name = "Coecifiente de educação",
+                    limits =  c(0.10,0.15))+
+  geom_vline(xintercept = 2014, lty = 2, color = "red")
+```
+
