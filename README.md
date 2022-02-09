@@ -1,7 +1,7 @@
 # regression-mincer
 A study of mincer earnings regression with data from Brazilian demographic samples (PNAD-c).
 
-Este estudo foi realizado como um dos trabalhos para a disciplina de Estatística e Data Science para Ciências Sociais no Instituto de Estudos em Sociologia e Política (IESP/UERJ), ministrado pelos professores Rogério Jerônimo Barbosa e Carlos Antônio Ribeiro.
+Este estudo foi realizado como um dos trabalhos para a disciplina de Estatística e Data Science para Ciências Sociais no Instituto de Estudos em Sociologia e Política (IESP/UERJ), ministrado pelos professores Rogério Jerônimo Barbosa e Carlos Antônio Ribeiro. O roteiro foi escrito pelo professor Rogério J. Barbosa, e aqui está reproduzido com as partes dos exercícios que realizei.
 
 ## Introdução de Rojério Barbosa: Estudando os “retornos educacionais” no Brasil
 No final da década de 1950, surge, entre os economistas norte-americanos, uma nova abordagem para compreender a relação entre o trabalho e os salários auferidos no mercado: a Teoria do Capital Humano. Segundo suas hipóteses, as capacidades produtivas dos indivíduos seriam uma espécie de “ativo” ou “capital”; mas que, diferentemente do capital físico (máquinas e meios de produção em geral), seria algo incorporado e indissociável da própria pessoa: eventuais talentos e habilidades inatas, conhecimentos adquiridos ao longo da vida, a saúde física e mental etc.
